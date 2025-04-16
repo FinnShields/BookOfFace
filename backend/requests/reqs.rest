@@ -1,0 +1,6 @@
+POST http://localhost:3001/api/users/2/addcomment
+Content-Type: application/json
+
+{
+    "comment": "I WILL think of the mats"
+}

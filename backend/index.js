@@ -2,6 +2,7 @@ const express = require('express')
 const cors = require('cors')
 const path = require('path')
 const multer = require('multer')
+const db = require('./db')
 
 const app = express()
 app.use(cors())
@@ -64,6 +65,45 @@ let data = [
 
 app.get('/api/users', (request, response) => {
     response.json(data)
+})
+
+app.get('/db', async (request, response) => {
+    try {
+        const rows = await db.query(`
+            SELECT
+                users.id AS user_id,
+                users.username,
+                users.catchphrase,
+                users.picture,
+                comments.comment,
+                comments.author
+            FROM users
+            LEFT JOIN comments ON users.id = comments.user_id
+            `)
+        const usersMap = {}
+        rows.forEach(row => {
+            const id = row.user_id
+            if (!usersMap[id]) {
+                usersMap[id] = {
+                    id: id,
+                    username: row.username,
+                    catchphrase: row.catchphrase,
+                    picture: row.picture,
+                    comments: []
+                }
+            }
+            if (row.comment !== null) {
+                usersMap[id].comments.push({
+                    comment: row.comment,
+                    author: row.author
+                })
+            }
+        })
+        const users = Object.values(usersMap)
+        response.json(users)
+    } catch (err) {
+        response.status(500).end('db error')
+    }
 })
 
 app.get('/api/users/:id', (request, response) => {

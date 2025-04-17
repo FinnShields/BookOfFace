@@ -35,44 +35,15 @@ const upload = multer({
 
 const uploadImage = upload.single('image')
 
-let data = [
-    {
-        "username": "Finn",
-        "password": "123",
-        "catchphrase": "Will somebody think of the mats?!",
-        "comments": [{'comment': 'The microbial mats were here first..',
-                        'author': 'Everyone'}],
-        "picture": "Hamster.jpg",
-        "id": "1"
-    },
-    {
-        "username": "Verohallitus",
-        "password": "123",
-        "catchphrase": "That's my bike pump.. now",
-        "comments" : [],
-        "picture": "",
-        "id": "2"
-    },
-    {
-        "username": "Elintarvikeliitto",
-        "password": "123",
-        "catchphrase": "It's good our son doesn't visit more often",
-        "comments" : [],
-        "picture": "",
-        "id": "3"
-    }
-]
-
-app.get('/api/users', (request, response) => {
-    response.json(data)
-})
-
-app.get('/db', async (request, response) => {
+app.get('/api/users', async (request, response) => {
+    let conn
     try {
+        conn = await db.getConnection()
         const rows = await db.query(`
             SELECT
                 users.id AS user_id,
                 users.username,
+                users.password,
                 users.catchphrase,
                 users.picture,
                 comments.comment,
@@ -85,9 +56,10 @@ app.get('/db', async (request, response) => {
             const id = row.user_id
             if (!usersMap[id]) {
                 usersMap[id] = {
-                    id: id,
+                    id: id.toString(),
                     username: row.username,
                     catchphrase: row.catchphrase,
+                    password: row.password,
                     picture: row.picture,
                     comments: []
                 }
@@ -103,56 +75,137 @@ app.get('/db', async (request, response) => {
         response.json(users)
     } catch (err) {
         response.status(500).end('db error')
+    } finally {
+        if (conn)
+            conn.release()
     }
 })
 
-app.get('/api/users/:id', (request, response) => {
-    const id = request.params.id
-    const toShow = data.find(user => user.id === id)
-    if (toShow)
-        response.json(toShow)
-    else
-        response.status(404).end(`No user with id ${id}`)
-})
-
-app.post('/api/users', (request, response) => {
+app.post('/api/users', async (request, response) => {
     const body = request.body
-    if (!body.username)
-        return response.status(400).json({error: "missing username"})
-    if (data.find(user => user.username === body.username))
-        return response.status(400).json({error: "User already exists"})
-    const newUser = {
-        username: body.username,
-        password: body.password,
-        catchphrase: body.catchphrase,
-        comments: body.comments,
-        id: (Math.floor(Math.random() * 1000000000)).toString()
+    if (!body.username || !body.password)
+        return response.status(400).json({error: "missing username or password"})
+    let conn
+    try {
+        conn = await db.getConnection()
+        const existingUsers = await conn.query(
+            `SELECT id FROM users WHERE username = ?`,
+            [body.username]
+        )
+        if (existingUsers.length > 0)
+            return response.status(409).json({ error: 'Username already taken' })
+        const result = await conn.query(
+            `INSERT INTO users (username, password, catchphrase, picture)
+            VALUES (?, ?, ?, ?)`,
+            [body.username, body.password, '', '']
+        )
+        const newId = result.insertId
+        response.status(201).json({
+            username: body.username,
+            password: body.password,
+            catchphrase: '',
+            picture: '',
+            comments: [],
+            id: newId.toString()
+        })
+    } catch (err) {
+        console.error('User insert error:', err)
+        response.status(500).json({ error: 'db error' })
+    } finally {
+        if (conn)
+            conn.release()
     }
-    data = data.concat(newUser)
-    response.json(newUser).end()
 })
 
-app.post('/api/users/:id/addcomment', (request, response) => {
+app.post('/api/users/:id/addcomment', async (request, response) => {
     const id = request.params.id
     const body = request.body
-    const user = data.find(u => u.id === id)
-    if (!user)
-        return response.status(400).json({error: "No such user"})
-    if (!body.comment)
-        return response.status(400).json({error: "missing comment"})
-    user.comments = user.comments.concat(body)
-    data = data.map(u => u.id === id ? user : u)
-    response.json(user).end()
+    let conn
+    try {
+        conn = await db.getConnection()
+        const userCheck = await conn.query(
+            `SELECT id FROM users WHERE id = ?`,
+            [id]
+        )
+        if (userCheck.length === 0)
+            return response.status(404).json({error: 'no user by that id' })
+        await conn.query(
+            `INSERT INTO comments (user_id, comment, author)
+            VALUES (?, ?, ?)`,
+            [id, body.comment, body.author]
+        )
+        const userData = await conn.query(
+            `SELECT
+                u.id AS user_id,
+                u.username,
+                u.catchphrase,
+                u.picture,
+                c.comment,
+                c.author
+            FROM users u
+            LEFT JOIN comments c ON u.id = c.user_id
+            WHERE u.id = ?`,
+            [id]
+        )
+        if (userData.length === 0)
+            return response.status(404).json({ error: 'User not found' })
+        const user = {
+            id: userData[0].user_id.toString(),
+            username: userData[0].username,
+            catchphrase: userData[0].catchphrase,
+            picture: userData[0].picture,
+            comments: []
+        }
+        userData.forEach(row => {
+            if (row.comment !== null) {
+                user.comments.push({
+                    comment: row.comment,
+                    author: row.author
+                })
+            }
+        })
+        response.status(201).json(user)
+    } catch (err) {
+        console.error('Error getting user with comments', err)
+        response.status(500).json({ error: 'db error' })
+    } finally {
+        if (conn)
+            conn.release()
+    }
 })
 
-app.put('/api/users/:id', (request, response) => {
+app.put('/api/users/:id', async (request, response) => {
     const id = request.params.id
     const body = request.body
-    const user = data.find(u => u.id === id)
-    if (!user || user.id !== body.id)
-        return response.status(400).json({error: 'Bad request'})
-    data = data.map(u => u.id === id ? body : u)
-    response.json(body).end()
+    const updates = []
+    const values = []
+
+    if (body.catchphrase !== undefined) {
+        updates.push('catchphrase = ?')
+        values.push(body.catchphrase)
+    }
+    if (body.picture !== undefined) {
+        updates.push('picture = ?')
+        values.push(body.picture)
+    }
+    if (updates.length === 0)
+        return response.status(400).json({ error: 'no valid fields' })
+    let conn
+    try {
+        conn = await db.getConnection()
+        const sql = `UPDATE users SET ${updates.join(', ')} WHERE id = ?`
+        values.push(id)
+        const result = await conn.query(sql, values)
+        if (result.affectedRows === 0)
+            return response.status(404).json({ error: 'user not found' })
+        response.json(body)
+    } catch (err) {
+        console.error('Error updating user', err)
+        response.status(500).json({ error: 'db error' })
+    } finally {
+        if (conn)
+            conn.release()
+    }
 })
 
 app.post('/api/users/image', uploadImage, (request, response) => {
@@ -166,5 +219,3 @@ const PORT = 3001
 app.listen(PORT, () => {
     console.log(`Listening on port ${PORT}`)
 })
-
-

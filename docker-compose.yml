@@ -5,6 +5,8 @@ services:
       dockerfile: Dockerfile
     ports:
       - "5173:5173"
+    depends_on:
+      - mariadb
     volumes:
       - ./frontend:/app 
       - /app/node_modules

@@ -2,5 +2,29 @@ POST http://localhost:3001/api/users/2/addcomment
 Content-Type: application/json
 
 {
-    "comment": "I WILL think of the mats"
+    "comment": "I too WILL think of the mats",
+    "author": "Finn"
+}
+
+###
+
+POST http://localhost:3001/api/users
+Content-Type: application/json
+
+{
+    "username": "newUser",
+    "password": "password"
+}
+
+###
+
+POST http://localhost:3001/api/users
+Content-Type: application/json
+
+{
+    "username": "newUser2",
+    "password": "password",
+    "catchphrase": "",
+    "picture": "",
+    "comments": []
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react"
 import axios from 'axios'
 import Select from 'react-select'
+import './index.css'
 
 const apiUrl = 'http://localhost:3001/api/users'
 const imgUrl = 'http://localhost:3001/uploads'
@@ -11,15 +12,16 @@ const LogIn = (props) => {
       ? `${imgUrl}/${props.loggedIn.picture}`
       : `${imgUrl}/default.jpg`
     return (<>
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
     <img src={imageSource} height={50} width={50} style={{ alignSelf: 'center' }} />
     <p>Logged in as {props.loggedIn.username}</p>
+    <button onClick={props.handleEditMode}>Edit profile</button>
     <button onClick={props.logOut}>Log out</button>
     </div>
     </>)
   }
   return (
-    <>
+    <div>
     <form onSubmit={props.attemptLogIn}>
       <div>
         username: <input value={props.usernameInput} onChange={props.handleUsernameInput} />
@@ -32,18 +34,19 @@ const LogIn = (props) => {
         <button onClick={props.createNewUser}>Create new account</button>
       </div>
     </form>
-    
-    </>
+    </div>
   )
 }
 
 const Comments = (props) => {
   const comments = props.profileToDisplay.comments
-  const nothingToDisplay = (comments.length === 0) ? 'Nothing to display...' : ''
+  const nothingToDisplay = (comments.length === 0)
+    ? <p><i>Nothing to display...</i></p>
+    : <></>
   return (
     <>
     <h3>Comments</h3>
-    <p><i>{nothingToDisplay}</i></p>
+    {nothingToDisplay}
     <ul>{comments.map(c =>
       <li key={c.comment}><b>{c.author}: </b>{c.comment}</li>)}
     </ul>
@@ -57,45 +60,46 @@ const Comments = (props) => {
 
 const EditMode = (props) => {
   return (
-    <>
-    <h2>{props.profileToDisplay.username}</h2>
-    <p>Edit catchphrase?</p>
-    <input value={props.slogan} onChange={props.handleSlogan}
-      placeholder={props.profileToDisplay.catchphrase}></input>
-    <input
-      name="image"
-      type="file"
-      id="upload-button"
-      style={{ dispaly: 'none'}}
-      onChange={props.handlePhotoChange}
-      />
-    <label htmlFor="upload-button">
-      {props.image.preview ? (
-        <img
-          src={props.image.preview}
-          alt="dummy"
-          width="100"
-          height="100"
-          className="my-10 mx-5"
+    <div class='inner-content'>
+      <h2>{props.loggedIn.username}</h2>
+      <div>
+        <p>Upload new profile picture?</p>
+        <input
+          name="image"
+          type="file"
+          id="upload-button"
+          onChange={props.handlePhotoChange}
           />
-      ) : (
-        <>
-        <p className="text-white text-1xl text-left w-full text-left">
-          Upload image
-          </p>
-          <div />
-          </>
-      )}
-    </label>
-    <button
-      type="button"
-      onClick={props.submit}
-      className="text-white w-full mt-2 border-[1px]
-      p-2 border-[#3d4f7c] rounded-full cursor-pointer ">
-    Submit
-    </button>
-    <div><button onClick={props.updateProfile}>Save changes</button></div>
-    </>
+      </div>
+      <div>
+      <label htmlFor="upload-button">
+        {props.image.preview ? (
+          <img
+            src={props.image.preview}
+            alt="dummy"
+            width="100"
+            height="100"
+            />
+        ) : (<></>)}
+      </label>
+      </div>
+      <div style={{marginBottom: '25px'}}>
+        <button
+          type="button"
+          onClick={props.submit}>
+        Submit profile pic
+        </button>
+      </div>
+      <div style={{marginBottom: '25px'}}>
+        <p>Edit catchphrase?</p>
+        <input value={props.slogan} onChange={props.handleSlogan}
+          placeholder={props.loggedIn.catchphrase}></input>
+      </div>
+      <div>
+        <button onClick={props.updateProfile}>Save changes</button>
+        <button onClick={props.exitNoSave}>Cancel</button>
+      </div>
+    </div>
   )
 }
 
@@ -107,8 +111,6 @@ const DisplayProfile = (props) => {
   else if (props.editMode)
     return <EditMode {...props}/>
   else {
-    const editButton = (props.loggedIn.username === props.profileToDisplay.username)
-      ? <button onClick={props.handleEditMode}>Edit profile</button> : null
     const options = props.users.map(user => ({
       value: user,
       label: user.username
@@ -116,18 +118,23 @@ const DisplayProfile = (props) => {
     const imageSource = (props.profileToDisplay.picture)
       ? `${imgUrl}/${props.profileToDisplay.picture}`
       : `${imgUrl}/default.jpg`
+    const catchphrase = (props.profileToDisplay.catchphrase)
+      ? <p>"<i>{props.profileToDisplay.catchphrase}</i>"</p>
+      : <></>
     return (
-      <>
+      <div class='left-container'>
+      <div class='inner-content'>
       <Select options={options}
         isSearchable
         placeholder="View a profile..."
         onChange={props.handleUserSearch}/>
-      <div>{editButton}</div>
       <h2>{props.profileToDisplay.username}</h2>
-      <img src={imageSource} height={250} width={250} />
-      <p>"<i>{props.profileToDisplay.catchphrase}</i>"</p>
+      <img src={imageSource}
+        style={{ objectFit: 'cover', borderRadius: '8px', height: 250, width: 250 }} />
+      {catchphrase}
       <Comments {...props}/>
-      </>
+      </div>
+      </div>
     )
   }
 }
@@ -249,6 +256,11 @@ const  App = () => {
     setLoggedIn(null)
     setUsernameInput('')
     setPasswordInput('')
+    setEditMode(false)
+    setImage({
+      preview: '',
+      raw: '',
+    })
   }
 
   const createNewUser = (event) => {
@@ -279,6 +291,16 @@ const  App = () => {
     }
   }
 
+  const exitNoSave = (event) => {
+    event.preventDefault()
+    setEditMode(false)
+    setProfileToDisplay(loggedIn)
+    setImage({
+      preview: '',
+      raw: '',
+    })
+  }
+
   const submit = async () => {
     let formData = new FormData()
     formData.append('image', image.raw)
@@ -290,27 +312,28 @@ const  App = () => {
       })
       .then(response => {
         setImageName(response.data.filename)
+        alert(`Successfully uploaded image, now hit save to apply changes`)
         return response.data
       })
       .catch(error => {
-
+        console.error('Image upload error', error)
         alert(`Image upload error`)
       })
   }
   const loggedInProps = {logOut, usernameInput, handleUsernameInput, passwordInput, handlePasswordInput,
-    attemptLogIn, createNewUser, users, loggedIn}
+    attemptLogIn, createNewUser, users, loggedIn, handleEditMode}
   const displayProfileProps = {users, loggedIn, profileToDisplay, handleUserSearch,
     addComment, comment, handleComment, editMode, handleEditMode, handleSlogan, updateProfile,
-    handlePhotoChange, submit, image}
+    handlePhotoChange, submit, image, exitNoSave}
 
   return (
-    <>
+    <div class="centered-wrapper">
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
     <h1>Book of Face</h1>
     <LogIn {...loggedInProps}/>
     </div>
     <DisplayProfile {...displayProfileProps}/>
-    </>
+    </div>
   )
 }
 
